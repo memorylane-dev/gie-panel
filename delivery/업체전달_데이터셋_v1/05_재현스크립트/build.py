@@ -147,39 +147,8 @@ for _, ix in dim.iterrows():
         recs.append(sub)
 micro = pd.concat(recs, ignore_index=True)
 micro["지역규모코드"] = micro.apply(lambda r: REGION[1 if r["조사연도"]==2021 else 2].get(r["학교ID"]), axis=1)
-
-# ── 가명 처리 ────────────────────────────────────────────────
-#  집계에 응답자ID·학교ID는 사용되지 않는다(그룹 기준은 indicator_id + 조사연도 + 지역규모코드).
-#  원본 ID는 학교코드를 자리수에 내포하므로(STUID = SCHID×10000 + 순번) 대체키로 치환한다.
-#   - 학교키   : 주기와 무관하게 동일 학교에 동일 키. 학교 단위 추적 가능성 유지
-#   - 응답자키 : 주기 내에서만 유효. 학부모 STUID가 자녀의 학생 ID이므로
-#                주기별로 ID 값 자체를 매핑하여 학생–학부모 쌍 연결을 보존한다
-#  매핑표는 data/private/ 에 저장하며 전달 패키지에 포함하지 않는다.
-import random
-def _surrogate(values, prefix, width, seed):
-    vals = sorted({v for v in values if pd.notna(v)})
-    order = list(range(1, len(vals)+1))
-    random.Random(seed).shuffle(order)          # 원본 순서가 드러나지 않게 섞는다
-    return {v: f"{prefix}{n:0{width}d}" for v, n in zip(vals, order)}
-
-SCH_MAP = _surrogate(micro["학교ID"], "SCH", 3, 20260907)
-micro["학교키"] = micro["학교ID"].map(SCH_MAP)
-
-PER_MAP = {}
-for yr, g in micro.groupby("조사연도"):
-    for pfx, sub in (("P", g[g.응답주체.isin(["학생","학부모"])]), ("T", g[g.응답주체=="교사"])):
-        m = _surrogate(sub["응답자ID"], f"{pfx}{str(yr)[2:]}-", 6, 20260907 + yr + ord(pfx))
-        PER_MAP.update({(yr, k): v for k, v in m.items()})
-micro["응답자키"] = [PER_MAP.get((y, i)) for y, i in zip(micro["조사연도"], micro["응답자ID"])]
-
-PRIV = os.path.join(ROOT, "data", "private")
-os.makedirs(PRIV, exist_ok=True)
-pd.DataFrame([{"학교ID": k, "학교키": v} for k, v in SCH_MAP.items()]).to_csv(
-    os.path.join(PRIV, "id_mapping_school.csv"), index=False, encoding="utf-8-sig")
-pd.DataFrame([{"조사연도": y, "응답자ID": i, "응답자키": v} for (y, i), v in PER_MAP.items()]).to_csv(
-    os.path.join(PRIV, "id_mapping_respondent.csv"), index=False, encoding="utf-8-sig")
-print(f"  가명키: 학교 {len(SCH_MAP)}개 / 응답자 {len(PER_MAP):,}개  (매핑표 → data/private/)")
 micro["지역규모"] = micro["지역규모코드"].map(REGION_LBL).fillna("미상")
+
 print("마이크로 long 행수:", len(micro))
 
 # ── 3. 집계 ──────────────────────────────────────────────────
@@ -344,17 +313,14 @@ sch = pd.concat([
                 "설립구분코드":db1.YM1_DB0_1,"남녀공학코드":db1.YM1_DB0_4}),
   pd.DataFrame({"조사연도":2025,"학교ID":db2.SCHID.astype(int),"지역규모코드":db2.YM2_DB0_3,
                 "설립구분코드":db2.YM2_DB0_1,"남녀공학코드":db2.YM2_DB0_4})])
-sch["학교키"] = sch["학교ID"].map(SCH_MAP)
-sch = sch[sch["학교키"].notna()].drop(columns=["학교ID"])
-sch.insert(1, "학교키", sch.pop("학교키"))
 sch["지역규모"] = sch["지역규모코드"].map(REGION_LBL)
 sch["설립구분"] = sch["설립구분코드"].map({1.0:"공립",2.0:"사립"})
 sch["남녀공학"] = sch["남녀공학코드"].map({1.0:"남학교",2.0:"여학교",3.0:"남여공학"})
 # 학교DB에는 있으나 실제 응답이 수집되지 않은 학교가 있다. 응답주체별로 표기한다.
 for resp, col in [("학생","학생응답"),("학부모","학부모응답"),("교사","교사응답")]:
-    have = micro[micro.응답주체==resp].groupby("조사연도")["학교키"].apply(set).to_dict()
+    have = micro[micro.응답주체==resp].groupby("조사연도")["학교ID"].apply(set).to_dict()
     sch[col] = [("Y" if k in have.get(y,set()) else "N")
-                for y,k in zip(sch["조사연도"], sch["학교키"])]
+                for y,k in zip(sch["조사연도"], sch["학교ID"])]
 w(sch, "01_정의/dim_school.csv")
 
 ORDER = ["조사명","학교급","조사연도","주기","지역규모코드","지역규모",
@@ -375,10 +341,8 @@ w(fact_dist.sort_values(["indicator_id","조사연도","코드"]), "02_집계/fa
 w(fact_topic.sort_values(["대분류코드","소주제코드","조사연도"]), "02_집계/fact_topic_wave.csv")
 w(fact_headline, "02_집계/fact_headline.csv")
 
-MICRO_COLS = ["조사명","학교급","조사연도","주기","응답주체","응답자키","학교키",
-              "indicator_id","원변수명","값","결측보정","지역규모코드","지역규모"]
 for resp, fn in [("학생","micro_student"),("학부모","micro_parent"),("교사","micro_teacher")]:
-    sub = micro[micro.응답주체==resp][MICRO_COLS]
+    sub = micro[micro.응답주체==resp]
     sub.to_csv(os.path.join(OUT,f"03_마이크로데이터/{fn}.csv.gz"), index=False,
                encoding="utf-8-sig", compression="gzip")
     print(f"  03_마이크로데이터/{fn}.csv.gz: {len(sub):,}행")
