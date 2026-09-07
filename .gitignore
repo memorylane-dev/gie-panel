@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 ~$*
 .ipynb_checkpoints/
+
+# SPSS 변환본 — 원자료(.sav)에서 언제든 재생성 가능하므로 커밋하지 않음
+# 재생성: python tools/sav_export.py
+data/exports/wave1_2021/
+data/exports/wave2_2025/
