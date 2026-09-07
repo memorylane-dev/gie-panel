@@ -89,7 +89,15 @@ COMPETENCY = [
 ]
 
 # 역문항 (역채점 필요) — 소주제 총점 산출 시 제외
-REVERSE_ITEMS = {"ST_RELATION_02","PR_RELATION_02","PR_RELATION_05"}
+#  문항-나머지총점 상관으로 판별. 음의 상관이면 척도의 다른 문항과 방향이 반대다.
+#    ST_RELATION_06  r=-0.326(1주기) / -0.135(2주기)  "선생님들은 나에게 무관심하다"
+#    PR_RELATION_05  r=-0.380 / -0.449               "선생님들은 내 아이에게 관심이 부족하다"
+#    PR_RELATION_02  r=-0.102 / -0.194               "친구들이 내 아이에게 상처를 준 적이 있다"
+#  ST_RELATION_02는 의미상 역문항이나 상관이 +0.011 / +0.068로 0에 가깝다.
+#  방향이 반대인 것이 아니라 척도와 겉도는 문항이므로 동일하게 평균에서 제외하되
+#  역채점 대상으로는 보지 않는다.
+REVERSE_ITEMS = {"ST_RELATION_06","PR_RELATION_02","PR_RELATION_05"}
+SCALE_MISFIT  = {"ST_RELATION_02"}   # 척도 부적합 — 평균에서 제외
 
 # 다중응답 이분문항: 미선택이 결측으로 저장된 경우 0으로 보정
 MULTIRESP_FILL0 = {

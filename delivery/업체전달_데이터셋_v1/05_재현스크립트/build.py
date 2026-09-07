@@ -2,7 +2,7 @@
 import sys, os, json, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, RAW_W1, RAW_W2, MAPPING, DELIVERY, N, ls, find_file
-from taxonomy import TAXO, CATEGORIES, COMPETENCY, REVERSE_ITEMS, MULTIRESP_FILL0, DATA_ISSUE, SUBSCALE, CONDITIONAL_BASE
+from taxonomy import TAXO, CATEGORIES, COMPETENCY, REVERSE_ITEMS, SCALE_MISFIT, MULTIRESP_FILL0, DATA_ISSUE, SUBSCALE, CONDITIONAL_BASE
 import openpyxl, pyreadstat, pandas as pd, numpy as np
 
 OUT = DELIVERY
@@ -74,7 +74,8 @@ for r in raw:
         var_2021=v1, var_2025=v2, 연계판정=jud, 통계유형=st, 선지수=nsel,
         척도최소=smin, 척도최대=smax, 척도최소라벨=(l2.get(smin) or l1.get(smin) or ""),
         척도최대라벨=(l2.get(smax) or l1.get(smax) or ""),
-        긍정코드=pos_val, 역문항="Y" if cid in REVERSE_ITEMS else "N",
+        긍정코드=pos_val,
+        역문항="Y" if cid in REVERSE_ITEMS else ("척도 부적합" if cid in SCALE_MISFIT else "N"),
         시계열비교가능=ts, 주체간비교=cross, 확인필요=chk,
         데이터이슈=issue, 응답기저=CONDITIONAL_BASE.get(cid,""),
         주의사항=note, 출처="변수매칭_6_최종연계목록"))
@@ -199,7 +200,7 @@ fact_dist.insert(0,"학교급","중학교"); fact_dist.insert(0,"조사명","경
 
 # 소주제 총점(리커트 환산100 평균, 역문항·비교불가 제외)
 core = fact_wave[(fact_wave.통계유형=="likert") & (fact_wave.시계열비교가능.isin(["Y","조건부"]))]
-core = core[~core.indicator_id.isin(REVERSE_ITEMS)]
+core = core[~core.indicator_id.isin(REVERSE_ITEMS | SCALE_MISFIT)]
 fact_topic = (core.groupby(["대분류코드","대분류","소주제코드","소주제","응답주체","조사연도","주기"])
     .agg(지표수=("indicator_id","nunique"), 평균환산100=("환산100","mean"),
          평균응답수=("응답수","mean")).reset_index())
