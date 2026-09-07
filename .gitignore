@@ -9,3 +9,6 @@ __pycache__/
 # 재생성: python tools/sav_export.py
 data/exports/wave1_2021/
 data/exports/wave2_2025/
+
+# 전달 압축본 (재생성 가능)
+*.zip
