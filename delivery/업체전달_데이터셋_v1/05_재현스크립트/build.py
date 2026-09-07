@@ -112,9 +112,12 @@ for _, ix in dim.iterrows():
         if ix["통계유형"]=="binary" and var in fill_list:
             s = s.fillna(0.0); filled = True
         # R2: 라벨 정의 범위 밖 값 결측 처리
+        #  주의: R1로 보정한 0은 라벨에 정의돼 있지 않을 수 있으므로 허용 코드에 포함해야 한다.
+        #  (그러지 않으면 R1이 무효화되어 1주기 다중응답 문항의 긍정응답률이 100%가 된다)
         lab = m.variable_value_labels.get(var, {})
         if lab and ix["통계유형"] in ("likert","binary"):
-            s = s.where(s.isin(list(lab.keys())) | s.isna())
+            allowed = set(lab.keys()) | ({0.0} if filled else set())
+            s = s.where(s.isin(list(allowed)) | s.isna())
         # R3: 연속형 음수 결측
         if ix["통계유형"]=="continuous":
             s = s.where(s >= 0)
