@@ -6,7 +6,9 @@ import pandas as pd
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
-# 한글 컬럼 → 영문 물리명 (업체가 한글 컬럼을 못 받을 경우 사용)
+# 컬럼명은 한글을 정식 명칭으로 사용한다(2026-09-07 결정).
+# 아래 영문명은 BI 도구·DB가 한글 컬럼을 지원하지 않을 경우를 대비한 예비 매핑이며,
+# 전환이 필요하면 이 딕셔너리로 CSV 헤더를 치환한 뒤 재생성하면 된다.
 EN = {
  "조사명":"survey_name","학교급":"school_level","조사연도":"survey_year","주기":"wave_name",
  "주기코드":"wave_code","주기번호":"wave_no","주기명":"wave_label",
@@ -139,7 +141,7 @@ def build(out_dir):
         tl.append(dict(구분=kind, 테이블명=phys, 논리명=name, 파일=path,
                        행수=n, 열수=len(df.columns), 용도=note))
         for i, c in enumerate(df.columns, 1):
-            cl.append(dict(테이블명=phys, 순번=i, 컬럼명=c, 물리명=EN.get(c, ""),
+            cl.append(dict(테이블명=phys, 순번=i, 컬럼명=c, **{"영문명(예비)": EN.get(c, "")},
                            자료형=dtype_of(df[c]),
                            널허용="N" if df[c].notna().all() else "Y",
                            설명=DESC.get(c, ""),
@@ -148,6 +150,25 @@ def build(out_dir):
         "1. 테이블 목록": pd.DataFrame(tl),
         "2. 컬럼 정의": pd.DataFrame(cl),
         "3. 테이블 관계": pd.DataFrame(JOINS, columns=["기준 테이블","참조 테이블","조인 키","관계","용도"]),
+        "4. 명명·형식 규칙": pd.DataFrame([
+          dict(항목="컬럼명", 규칙="한글 사용",
+               내용="CSV 헤더는 한글을 정식 명칭으로 한다. '2. 컬럼 정의' 시트의 '영문명(예비)'은 "
+                    "BI 도구·DB가 한글 컬럼을 지원하지 않을 경우를 위한 대체안이며 현재 파일에는 쓰이지 않는다."),
+          dict(항목="파일 형식", 규칙="CSV (UTF-8 BOM)",
+               내용="Excel에서 바로 열리도록 BOM을 포함한다. 구분자는 쉼표, 인용부호는 큰따옴표."),
+          dict(항목="테이블명", 규칙="영문 스네이크",
+               내용="dim_* 은 차원(변하지 않는 정의), fact_* 은 사실(측정값), micro_* 은 개인 단위 원자료."),
+          dict(항목="결측 표현", 규칙="빈칸",
+               내용="해당 지표 유형에 없는 통계량은 빈칸이다(예: 선택형 지표의 '지출자평균'). "
+                    "'대표값' 컬럼만 사용하면 지표 유형별 분기가 불필요하다."),
+          dict(항목="수치 자리수", 규칙="원값 보존",
+               내용="평균 소수 4자리, 환산100·비율 2자리로 저장한다. 화면 표시용 반올림은 업체 측에서 처리한다."),
+          dict(항목="코드값", 규칙="코드+명칭 병기",
+               내용="지역규모·대분류·소주제 등은 코드 컬럼과 명칭 컬럼을 함께 제공한다. "
+                    "정렬·필터는 코드, 표시는 명칭을 사용하면 된다."),
+          dict(항목="갱신 방식", 규칙="전체 교체",
+               내용="주기가 추가되면 전 파일을 재생성하여 교체한다. 증분 갱신은 지원하지 않는다."),
+        ]),
     }
     xl = os.path.join(out_dir, "01_정의", "테이블정의서.xlsx")
     with pd.ExcelWriter(xl, engine="openpyxl") as xw:
@@ -156,7 +177,7 @@ def build(out_dir):
         HDR = PatternFill("solid", fgColor="DDE4EE")
         line = Side(style="thin", color="BFC8D6"); hair = Side(style="hair", color="D8DEE8")
         W = {"구분":7,"테이블명":26,"논리명":26,"파일":34,"행수":9,"열수":5,"용도":46,
-             "순번":5,"컬럼명":18,"물리명":20,"자료형":7,"널허용":7,"설명":58,"예시":30,
+             "순번":5,"컬럼명":18,"영문명(예비)":20,"자료형":7,"널허용":7,"설명":58,"예시":30,
              "기준 테이블":26,"참조 테이블":22,"조인 키":30,"관계":6}
         for k, v in sheets.items():
             ws = wb[k]; ws.freeze_panes = "A2"; ws.sheet_view.showGridLines = False
