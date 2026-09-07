@@ -289,12 +289,16 @@ fact_topic.insert(0,"학교급","중학교"); fact_topic.insert(0,"조사명","�
 # 헤드라인 카드 (2021→2025 증감)
 p = fact_topic.pivot_table(index=["대분류코드","대분류","소주제코드","소주제","응답주체"],
                            columns="조사연도", values="평균환산100").reset_index()
-p = p.dropna(subset=[2021,2025])
-p["증감"] = (p[2025]-p[2021]).round(2)
-p["증감률"] = (p["증감"]/p[2021]*100).round(2)
+# 비교 시점은 WAVES의 마지막 두 개를 사용한다(주기 추가 시 자동으로 최신 두 시점).
+_years = sorted(y for _, _, y, _ in WAVES)
+PREV, CURR = _years[-2], _years[-1]
+p = p.dropna(subset=[PREV, CURR])
+p["직전시점"], p["최신시점"] = PREV, CURR
+p["증감"] = (p[CURR]-p[PREV]).round(2)
+p["증감률"] = (p["증감"]/p[PREV]*100).round(2)
 p["변화방향"] = np.where(p["증감"]>0,"증가",np.where(p["증감"]<0,"감소","유지"))
 p["절대증감순위"] = p["증감"].abs().rank(ascending=False, method="min").astype(int)
-fact_headline = p.rename(columns={2021:"값_2021",2025:"값_2025"}).sort_values("절대증감순위")
+fact_headline = p.rename(columns={PREV:f"값_{PREV}", CURR:f"값_{CURR}"}).sort_values("절대증감순위")
 fact_headline.insert(0,"학교급","중학교"); fact_headline.insert(0,"조사명","경기학교교육실태조사")
 
 # ── 4. 품질 점검 ─────────────────────────────────────────────
@@ -322,6 +326,19 @@ w(pd.DataFrame([{"주기코드":a,"주기번호":b,"조사연도":c,"주기명":
   "01_정의/dim_wave.csv")
 w(pd.DataFrame([{"지역규모코드":k,"지역규모":v} for k,v in REGION_LBL.items()]), "01_정의/dim_region.csv")
 w(pd.DataFrame(vlab_rows).drop_duplicates(), "01_정의/dim_value_label.csv")
+
+# 응답주체 간 비교(다계열 그래프) 성립 여부 — 변수매칭표 5번 시트
+_cr = [[N(str(c)) if c is not None else "" for c in r]
+       for r in wb["5_응답주체간비교"].iter_rows(values_only=True)][2:]
+_cr = [r for r in _cr if r[0]]
+cross = pd.DataFrame([dict(
+    등급=r[0], 성립여부=("성립" if r[1]=="유지" else "불가"), 사유=(""if r[1]=="유지" else r[1]),
+    비교조합=r[2], 주제=r[3],
+    학생_1주기=r[4], 학생_2주기=r[5], 학생판정=r[6],
+    학부모_1주기=r[7], 학부모_2주기=r[8], 학부모판정=r[9],
+    교사_1주기=r[10], 교사_2주기=r[11], 교사판정=r[12],
+    척도=r[13], 주의사항=r[14]) for r in _cr])
+w(cross, "01_정의/dim_cross_respondent.csv")
 sch = pd.concat([
   pd.DataFrame({"조사연도":2021,"학교ID":db1.SCHID.astype(int),"지역규모코드":db1.YM1_DB0_3,
                 "설립구분코드":db1.YM1_DB0_1,"남녀공학코드":db1.YM1_DB0_4}),
@@ -333,6 +350,11 @@ sch.insert(1, "학교키", sch.pop("학교키"))
 sch["지역규모"] = sch["지역규모코드"].map(REGION_LBL)
 sch["설립구분"] = sch["설립구분코드"].map({1.0:"공립",2.0:"사립"})
 sch["남녀공학"] = sch["남녀공학코드"].map({1.0:"남학교",2.0:"여학교",3.0:"남여공학"})
+# 학교DB에는 있으나 실제 응답이 수집되지 않은 학교가 있다. 응답주체별로 표기한다.
+for resp, col in [("학생","학생응답"),("학부모","학부모응답"),("교사","교사응답")]:
+    have = micro[micro.응답주체==resp].groupby("조사연도")["학교키"].apply(set).to_dict()
+    sch[col] = [("Y" if k in have.get(y,set()) else "N")
+                for y,k in zip(sch["조사연도"], sch["학교키"])]
 w(sch, "01_정의/dim_school.csv")
 
 ORDER = ["조사명","학교급","조사연도","주기","지역규모코드","지역규모",
@@ -380,7 +402,7 @@ json.dump({"지표수":int(len(dim)),
            "시계열비교가능_Y":int((dim.시계열비교가능=="Y").sum()),
            "조건부":int((dim.시계열비교가능=="조건부").sum()),
            "제외":int((dim.시계열비교가능=="N").sum()),
-           "대분류수":int(dim.대분류코드.nunique()),
+           "대분류수_정의":len(CATEGORIES), "대분류수_데이터보유":int(dim.대분류코드.nunique()),
            "소주제수":int(dim.소주제코드.nunique()),
            "마이크로행수":int(len(micro)),
            "집계행수":{"wave":int(len(fact_wave)),"region":int(len(fact_region)),

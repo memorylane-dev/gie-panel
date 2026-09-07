@@ -22,6 +22,8 @@ uv pip install --python .venv/bin/python pandas pyreadstat openpyxl
 4. 재실행 — 집계·헤드라인·분포표가 자동 확장됨
 
 ## 입력 원본
-- `시계열 시각화 데이터 클리닝/데이터_1주기/*.sav`
-- `시계열 시각화 데이터 클리닝/데이터_2주기/*.sav`
-- `시계열 시각화 데이터 클리닝/경기학교교육실태조사_12주기_변수매칭_최종.xlsx` (시트 `6_최종연계목록`)
+- `data/raw/wave1_2021/spss/*.sav`
+- `data/raw/wave2_2025/spss/*.sav`
+- `data/mapping/경기학교교육실태조사_1-2주기_변수매칭_최종.xlsx` (시트 `6_최종연계목록`, `5_응답주체간비교`)
+
+경로는 `common.py`가 저장소 루트를 기준으로 자동 해석하므로 어느 위치에서 실행해도 동작합니다.
