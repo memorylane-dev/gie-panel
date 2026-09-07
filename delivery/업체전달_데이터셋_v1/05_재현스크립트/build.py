@@ -2,7 +2,7 @@
 import sys, os, json, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, RAW_W1, RAW_W2, MAPPING, DELIVERY, N, ls, find_file
-from taxonomy import TAXO, CATEGORIES, COMPETENCY, REVERSE_ITEMS, SCALE_MISFIT, MULTIRESP_FILL0, DATA_ISSUE, SUBSCALE, CONDITIONAL_BASE
+from taxonomy import TAXO, CATEGORIES, COMPETENCY, REVERSE_ITEMS, SCALE_MISFIT, MULTIRESP_FILL0, DATA_ISSUE, COST_ITEMS, SUBSCALE, CONDITIONAL_BASE
 import openpyxl, pyreadstat, pandas as pd, numpy as np
 
 OUT = DELIVERY
@@ -66,6 +66,11 @@ for r in raw:
     ts = "Y" if jud.startswith("①") else ("조건부" if jud.startswith("②") else "N")
     issue = DATA_ISSUE.get(cid,"")
     if issue: ts = "N"
+    if cid in COST_ITEMS:
+        ts = "조건부"
+        issue = ("1주기는 미지출을 0으로 기입, 2주기는 공란 처리 — 전체 평균은 응답 기저가 다르다. "
+                 "시계열 비교에는 가정이 필요 없는 '지출자평균/지출자중앙값'을 사용할 것. "
+                 "'평균'·'지출참여율'은 2주기 결측=미지출 가정을 전제한다.")
     if st=="excluded": ts = "N"
     ind_rows.append(dict(
         indicator_id=cid, 대분류코드=cid_c, 대분류=cname, 소주제코드=sid, 소주제=sname,
@@ -141,9 +146,21 @@ def agg(g, st, smin, smax):
     out = {"응답수": int(len(v)), "결측수": int(g.isna().sum())}
     if len(v)==0:
         return {**out, "평균":np.nan,"표준편차":np.nan,"중앙값":np.nan,"백분위25":np.nan,
-                "백분위75":np.nan,"절사평균":np.nan,"환산100":np.nan,"상위2선지비율":np.nan,"긍정응답률":np.nan}
+                "백분위75":np.nan,"절사평균":np.nan,"환산100":np.nan,"상위2선지비율":np.nan,
+                "긍정응답률":np.nan,"지출자수":np.nan,"지출참여율":np.nan,
+                "지출자평균":np.nan,"지출자중앙값":np.nan}
     out.update(평균=round(float(v.mean()),4), 표준편차=round(float(v.std(ddof=1)),4) if len(v)>1 else np.nan,
                중앙값=float(v.median()), 백분위25=float(v.quantile(.25)), 백분위75=float(v.quantile(.75)))
+    if st=="continuous":
+        pay = v[v > 0]
+        out["지출자수"] = int(len(pay))
+        # 분모는 해당 주기 전체 응답자(결측 포함). 2주기 결측=미지출 가정 하에서 참여율이 되며,
+        # 가정이 성립하지 않으면 하한값으로 해석한다.
+        out["지출참여율"] = round(len(pay)/len(g)*100, 2) if len(g) else np.nan
+        out["지출자평균"] = round(float(pay.mean()), 4) if len(pay) else np.nan
+        out["지출자중앙값"] = float(pay.median()) if len(pay) else np.nan
+    else:
+        out["지출자수"] = out["지출참여율"] = out["지출자평균"] = out["지출자중앙값"] = np.nan
     if st=="continuous" and len(v)>=20:
         lo,hi = v.quantile(.01), v.quantile(.99)
         out["절사평균"] = round(float(v[(v>=lo)&(v<=hi)].mean()),4)
