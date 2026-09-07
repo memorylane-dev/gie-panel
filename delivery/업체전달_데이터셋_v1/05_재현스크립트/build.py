@@ -349,4 +349,8 @@ json.dump({"지표수":int(len(dim)),
            "집계행수":{"wave":int(len(fact_wave)),"region":int(len(fact_region)),
                     "dist":int(len(fact_dist)),"topic":int(len(fact_topic))}},
           open(os.path.join(OUT,"04_품질/build_summary.json"),"w"), ensure_ascii=False, indent=2)
+import tabledef
+_xl, _n = tabledef.build(OUT)
+print(f"  01_정의/테이블정의서.xlsx  " + " / ".join(f"{k}: {v}행" for k, v in _n.items()))
+
 print("\n완료:", OUT)

@@ -13,6 +13,7 @@ uv pip install --python .venv/bin/python pandas pyreadstat openpyxl
 - `common.py`   — 원본 폴더 탐색 (macOS 한글 파일명 NFD 정규화 처리 포함)
 - `taxonomy.py` — 대분류·소주제 매핑, 하위척도 분리, 역문항, 결측 보정 규칙, 데이터 이슈 목록
 - `build.py`    — 정제·집계·산출 전 과정
+- `tabledef.py` — 테이블 정의서 생성 (build.py가 마지막에 호출, 산출 CSV를 직접 읽으므로 항상 데이터와 일치)
 
 ## 신규 주기 추가 절차
 1. `build.py`의 `WAVES`에 `("W3", 3, 2029, "3주기")` 추가
