@@ -2,7 +2,7 @@
 import sys, os, json, math
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ROOT, RAW_W1, RAW_W2, MAPPING, DELIVERY, N, ls, find_file
-from taxonomy import TAXO, CATEGORIES, COMPETENCY, REVERSE_ITEMS, SCALE_MISFIT, MULTIRESP_FILL0, DATA_ISSUE, COST_ITEMS, SUBSCALE, CONDITIONAL_BASE
+from taxonomy import TAXO, CATEGORIES, COMPETENCY, REVERSE_ITEMS, SCALE_MISFIT, MULTIRESP_FILL0, DATA_ISSUE, COST_ITEMS, BASE_ALIGN, SUBSCALE, CONDITIONAL_BASE
 import openpyxl, pyreadstat, pandas as pd, numpy as np
 
 OUT = DELIVERY
@@ -66,6 +66,9 @@ for r in raw:
     ts = "Y" if jud.startswith("①") else ("조건부" if jud.startswith("②") else "N")
     issue = DATA_ISSUE.get(cid,"")
     if issue: ts = "N"
+    if cid in BASE_ALIGN:
+        ts = "조건부"
+        issue = BASE_ALIGN[cid][4]
     if cid in COST_ITEMS:
         ts = "조건부"
         issue = ("1주기는 미지출을 0으로 기입, 2주기는 공란 처리 — 전체 평균은 응답 기저가 다르다. "
@@ -124,6 +127,13 @@ for _, ix in dim.iterrows():
         if lab and ix["통계유형"] in ("likert","binary"):
             allowed = set(lab.keys()) | ({0.0} if filled else set())
             s = s.where(s.isin(list(allowed)) | s.isna())
+        # R7: 응답 기저 정렬 — 한 주기에만 분기가 걸린 문항의 기저를 맞춘다
+        aligned = ""
+        if cid in BASE_ALIGN:
+            a_resp, a_wave, a_var, a_val, a_note = BASE_ALIGN[cid]
+            if resp == a_resp and wnum == a_wave and a_var in df.columns:
+                s = s.where(df[a_var] == a_val)
+                aligned = f"기저정렬({a_var}={a_val:g})"
         # R3: 연속형 음수 결측
         if ix["통계유형"]=="continuous":
             s = s.where(s >= 0)
@@ -133,7 +143,7 @@ for _, ix in dim.iterrows():
             "응답자ID": df[IDCOL[resp]].astype("Int64").astype(str),
             "학교ID": df["SCHID"].astype("Int64"),
             "indicator_id": cid, "원변수명": var, "값": s.values,
-            "결측보정": "미선택→0" if filled else ""})
+            "결측보정": ("미선택→0" if filled else "") + aligned})
         recs.append(sub)
 micro = pd.concat(recs, ignore_index=True)
 micro["지역규모코드"] = micro.apply(lambda r: REGION[1 if r["조사연도"]==2021 else 2].get(r["학교ID"]), axis=1)
