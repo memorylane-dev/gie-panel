@@ -200,16 +200,35 @@ def build_facts(by_region: bool):
                    소주제=ix["소주제"], 응답주체=ix["응답주체"], 지표명=ix["지표명"],
                    통계유형=st, 시계열비교가능=ix["시계열비교가능"])
         rec.update(agg(g["값"], st, smin, smax))
+        # 대표값: 지표 유형과 무관하게 그래프 y축에 바로 쓰는 단일 값
+        if st=="likert":
+            rec["대표값"], rec["대표값유형"] = rec.get("환산100"), "환산100점"
+        elif st=="binary":
+            rec["대표값유형"] = "긍정응답률(%)"
+        elif st=="continuous":
+            rec["대표값"] = rec.get("지출자중앙값") if pd.notna(rec.get("지출자중앙값")) else rec.get("중앙값")
+            rec["대표값유형"] = "지출자 중앙값(만원)"
+        else:
+            rec["대표값"], rec["대표값유형"] = np.nan, ""
         if st=="binary" and ix["긍정코드"]!="":
             v = g["값"].dropna()
             rec["긍정응답률"] = round(float((v==ix["긍정코드"]).mean()*100),2) if len(v) else np.nan
+            rec["대표값"] = rec["긍정응답률"]
         else:
             rec.setdefault("긍정응답률", np.nan)
+            rec.setdefault("대표값", np.nan)
         rows.append(rec)
     return pd.DataFrame(rows)
 
-fact_wave   = build_facts(False)
-fact_region = build_facts(True)
+_wave   = build_facts(False)
+_region = build_facts(True)
+_wave.insert(3, "지역규모코드", 0)
+_wave.insert(4, "지역규모", "전체")
+# 업체는 이 한 테이블만 물리면 된다.
+#   연도별 추이   → 지역규모='전체' 필터
+#   지역규모 비교 → 지역규모<>'전체' 필터
+fact_wave = pd.concat([_wave, _region], ignore_index=True)
+fact_region = _region   # 하위 호환(별도 파일로도 유지)
 
 # 선지 분포
 dist = (micro[micro["값"].notna()]
@@ -281,8 +300,20 @@ sch["설립구분"] = sch["설립구분코드"].map({1.0:"공립",2.0:"사립"})
 sch["남녀공학"] = sch["남녀공학코드"].map({1.0:"남학교",2.0:"여학교",3.0:"남여공학"})
 w(sch, "01_정의/dim_school.csv")
 
-w(fact_wave.sort_values(["대분류코드","소주제코드","indicator_id","조사연도"]), "02_집계/fact_indicator_wave.csv")
-w(fact_region.sort_values(["대분류코드","소주제코드","indicator_id","조사연도","지역규모코드"]), "02_집계/fact_indicator_wave_region.csv")
+ORDER = ["조사명","학교급","조사연도","주기","지역규모코드","지역규모",
+         "대분류코드","대분류","소주제코드","소주제","응답주체","indicator_id","지표명",
+         "통계유형","시계열비교가능","대표값","대표값유형",
+         "응답수","결측수","평균","표준편차","중앙값","백분위25","백분위75",
+         "환산100","상위2선지비율","긍정응답률",
+         "절사평균","지출자수","지출참여율","지출자평균","지출자중앙값"]
+def reorder(df):
+    cols=[c for c in ORDER if c in df.columns]+[c for c in df.columns if c not in ORDER]
+    return df[cols]
+fact_wave = reorder(fact_wave)
+w(fact_wave.sort_values(["대분류코드","소주제코드","indicator_id","조사연도","지역규모코드"]),
+  "02_집계/fact_indicator_wave.csv")
+w(reorder(fact_region).sort_values(["대분류코드","소주제코드","indicator_id","조사연도","지역규모코드"]),
+  "02_집계/fact_indicator_wave_region.csv")
 w(fact_dist.sort_values(["indicator_id","조사연도","코드"]), "02_집계/fact_indicator_dist.csv")
 w(fact_topic.sort_values(["대분류코드","소주제코드","조사연도"]), "02_집계/fact_topic_wave.csv")
 w(fact_headline, "02_집계/fact_headline.csv")
