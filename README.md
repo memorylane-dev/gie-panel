@@ -49,11 +49,13 @@ delivery/
     ├── 02_테이블정의서.xlsx      테이블·컬럼 정의, 관계, 명명 규칙
     ├── 03_집계사양서.md          집계 절차 규정 (업체 재구현용)
     ├── 04_변수매핑정의서.xlsx    1·2주기 문항 대응 내역
+    ├── 05_집계검증.py           집계 참조 구현 겸 검증 도구 (패키지 내에서 실행 가능)
     ├── dim_*.csv   (8)         차원 — 정의·분류·코드표
     ├── fact_*.csv  (5)         사실 — 집계 수치
-    ├── micro_*.csv (6)         원자료 — 개인 단위 long
-    ├── qc_*        (3)         품질 점검
-    └── 99_재현스크립트/          build.py 외
+    └── micro_*.csv (6)         원자료 — 개인 단위 long
+
+pipeline/                      정제 파이프라인 (원자료 필요, 전달 대상 아님)
+└── build.py · common.py · taxonomy.py · tabledef.py
 ```
 
 ## 산출 데이터 요약
@@ -93,7 +95,7 @@ data/mapping/*.xlsx┘
 ```bash
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python pandas pyreadstat openpyxl
-.venv/bin/python "delivery/업체전달_데이터셋_v1/05_재현스크립트/build.py"
+.venv/bin/python pipeline/build.py
 ```
 
 스크립트는 저장소 루트를 자동 인식하므로 어느 경로에서 실행해도 동일한 결과를 생성합니다.

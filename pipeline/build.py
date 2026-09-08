@@ -6,7 +6,7 @@ from taxonomy import TAXO, CATEGORIES, COMPETENCY, REVERSE_ITEMS, SCALE_MISFIT, 
 import openpyxl, pyreadstat, pandas as pd, numpy as np
 
 OUT = DELIVERY
-os.makedirs(os.path.join(OUT, "99_재현스크립트"), exist_ok=True)
+os.makedirs(OUT, exist_ok=True)
 
 WAVES = [("W1", 1, 2021, "1주기"), ("W2", 2, 2025, "2주기")]
 d1, d2 = RAW_W1, RAW_W2
@@ -353,8 +353,6 @@ for resp, fn in [("학생","student"),("학부모","parent"),("교사","teacher"
         sub.to_csv(os.path.join(OUT, name), index=False, encoding="utf-8-sig")
         print(f"  {name}: {len(sub):,}행")
 
-w(qc, "qc_indicator_summary.csv")
-w(excl, "qc_exclusions.csv")
 
 # 정의서 엑셀 번들 (업체 검토용)
 xl = os.path.join(OUT,"04_변수매핑정의서.xlsx")
@@ -368,16 +366,6 @@ with pd.ExcelWriter(xl, engine="openpyxl") as xw:
     excl.to_excel(xw, sheet_name="6_제외지표",index=False)
 print(f"  04_변수매핑정의서.xlsx")
 
-json.dump({"지표수":int(len(dim)),
-           "시계열비교가능_Y":int((dim.시계열비교가능=="Y").sum()),
-           "조건부":int((dim.시계열비교가능=="조건부").sum()),
-           "제외":int((dim.시계열비교가능=="N").sum()),
-           "대분류수_정의":len(CATEGORIES), "대분류수_데이터보유":int(dim.대분류코드.nunique()),
-           "소주제수":int(dim.소주제코드.nunique()),
-           "마이크로행수":int(len(micro)),
-           "집계행수":{"wave":int(len(fact_wave)),"region":int(len(fact_region)),
-                    "dist":int(len(fact_dist)),"topic":int(len(fact_topic))}},
-          open(os.path.join(OUT,"qc_build_summary.json"),"w"), ensure_ascii=False, indent=2)
 import tabledef
 _xl, _n = tabledef.build(OUT)
 print(f"  01_정의/테이블정의서.xlsx  " + " / ".join(f"{k}: {v}행" for k, v in _n.items()))

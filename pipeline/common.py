@@ -6,8 +6,8 @@ macOS 파일시스템은 한글 파일명을 NFD로 저장하므로, 파이썬 �
 """
 import os, unicodedata
 
-# 이 스크립트는 <repo>/delivery/업체전달_데이터셋_v1/05_재현스크립트/ 에 위치
-ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
+# 이 스크립트는 <repo>/pipeline/ 에 위치
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 def N(s):
     return unicodedata.normalize("NFC", s)
