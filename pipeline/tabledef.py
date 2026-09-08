@@ -186,7 +186,7 @@ def build(out_dir):
                내용="주기가 추가되면 전 파일을 재생성하여 교체한다. 증분 갱신은 지원하지 않는다."),
         ]),
     }
-    xl = os.path.join(out_dir, "02_테이블정의서.xlsx")
+    xl = os.path.join(out_dir, "01_테이블정의서.xlsx")
     with pd.ExcelWriter(xl, engine="openpyxl") as xw:
         for k, v in sheets.items(): v.to_excel(xw, sheet_name=k, index=False)
         wb = xw.book

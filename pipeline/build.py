@@ -354,20 +354,11 @@ for resp, fn in [("학생","student"),("학부모","parent"),("교사","teacher"
         print(f"  {name}: {len(sub):,}행")
 
 
-# 정의서 엑셀 번들 (업체 검토용)
-xl = os.path.join(OUT,"04_변수매핑정의서.xlsx")
-with pd.ExcelWriter(xl, engine="openpyxl") as xw:
-    pd.DataFrame(CATEGORIES, columns=["대분류코드","대분류","출처","주요 응답주체"]).to_excel(xw, sheet_name="1_대분류",index=False)
-    dim[["대분류코드","대분류","소주제코드","소주제","응답주체"]].drop_duplicates().sort_values(
-        ["대분류코드","소주제코드"]).to_excel(xw, sheet_name="2_소주제",index=False)
-    dim.to_excel(xw, sheet_name="3_지표마스터",index=False)
-    pd.DataFrame(vlab_rows).drop_duplicates().to_excel(xw, sheet_name="4_선지라벨",index=False)
-    qc.to_excel(xw, sheet_name="5_품질점검",index=False)
-    excl.to_excel(xw, sheet_name="6_제외지표",index=False)
-print(f"  04_변수매핑정의서.xlsx")
 
-import tabledef
+import tabledef, guidedoc
 _xl, _n = tabledef.build(OUT)
+guidedoc.build(OUT, dim, micro, fact_wave, fact_topic, fact_headline, cross, WAVES)
+print("  00_전달안내.md")
 print(f"  01_정의/테이블정의서.xlsx  " + " / ".join(f"{k}: {v}행" for k, v in _n.items()))
 
 print("\n완료:", OUT)
