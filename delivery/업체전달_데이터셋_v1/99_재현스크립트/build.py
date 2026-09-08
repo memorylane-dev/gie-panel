@@ -6,8 +6,7 @@ from taxonomy import TAXO, CATEGORIES, COMPETENCY, REVERSE_ITEMS, SCALE_MISFIT, 
 import openpyxl, pyreadstat, pandas as pd, numpy as np
 
 OUT = DELIVERY
-for d in ["01_정의","02_집계","03_마이크로데이터","04_품질"]:
-    os.makedirs(os.path.join(OUT,d), exist_ok=True)
+os.makedirs(os.path.join(OUT, "99_재현스크립트"), exist_ok=True)
 
 WAVES = [("W1", 1, 2021, "1주기"), ("W2", 2, 2025, "2주기")]
 d1, d2 = RAW_W1, RAW_W2
@@ -287,15 +286,15 @@ def w(df, path, **kw):
     df.to_csv(os.path.join(OUT,path), index=False, encoding="utf-8-sig", **kw)
     print(f"  {path}: {len(df):,}행")
 
-w(dim, "01_정의/dim_indicator.csv")
-w(pd.DataFrame(CATEGORIES, columns=["대분류코드","대분류","출처","주요 응답주체"]), "01_정의/dim_category.csv")
+w(dim, "dim_indicator.csv")
+w(pd.DataFrame(CATEGORIES, columns=["대분류코드","대분류","출처","주요 응답주체"]), "dim_category.csv")
 w(dim[["대분류코드","대분류","소주제코드","소주제","응답주체"]].drop_duplicates()
-     .sort_values(["대분류코드","소주제코드"]), "01_정의/dim_topic.csv")
+     .sort_values(["대분류코드","소주제코드"]), "dim_topic.csv")
 w(pd.DataFrame([{"조사연도":c,"주기코드":a,"주기번호":b,"주기명":d,
                  "조사명":"경기학교교육실태조사","학교급":"중학교"} for a,b,c,d in WAVES]),
-  "01_정의/dim_wave.csv")
-w(pd.DataFrame([{"지역규모코드":k,"지역규모":v} for k,v in REGION_LBL.items()]), "01_정의/dim_region.csv")
-w(pd.DataFrame(vlab_rows).drop_duplicates(), "01_정의/dim_value_label.csv")
+  "dim_wave.csv")
+w(pd.DataFrame([{"지역규모코드":k,"지역규모":v} for k,v in REGION_LBL.items()]), "dim_region.csv")
+w(pd.DataFrame(vlab_rows).drop_duplicates(), "dim_value_label.csv")
 
 # 응답주체 간 비교(다계열 그래프) 성립 여부 — 변수매칭표 5번 시트
 _cr = [[N(str(c)) if c is not None else "" for c in r]
@@ -308,7 +307,7 @@ cross = pd.DataFrame([dict(
     학부모_1주기=r[7], 학부모_2주기=r[8], 학부모판정=r[9],
     교사_1주기=r[10], 교사_2주기=r[11], 교사판정=r[12],
     척도=r[13], 주의사항=r[14]) for r in _cr])
-w(cross, "01_정의/dim_cross_respondent.csv")
+w(cross, "dim_cross_respondent.csv")
 sch = pd.concat([
   pd.DataFrame({"조사연도":2021,"학교ID":db1.SCHID.astype(int),"지역규모코드":db1.YM1_DB0_3,
                 "설립구분코드":db1.YM1_DB0_1,"남녀공학코드":db1.YM1_DB0_4}),
@@ -322,7 +321,7 @@ for resp, col in [("학생","학생응답"),("학부모","학부모응답"),("�
     have = micro[micro.응답주체==resp].groupby("조사연도")["학교ID"].apply(set).to_dict()
     sch[col] = [("Y" if k in have.get(y,set()) else "N")
                 for y,k in zip(sch["조사연도"], sch["학교ID"])]
-w(sch, "01_정의/dim_school.csv")
+w(sch, "dim_school.csv")
 
 ORDER = ["조사명","학교급","조사연도","주기","지역규모코드","지역규모",
          "대분류코드","대분류","소주제코드","소주제","응답주체","indicator_id","지표명",
@@ -335,12 +334,12 @@ def reorder(df):
     return df[cols]
 fact_wave = reorder(fact_wave)
 w(fact_wave.sort_values(["대분류코드","소주제코드","indicator_id","조사연도","지역규모코드"]),
-  "02_집계/fact_indicator_wave.csv")
+  "fact_indicator_wave.csv")
 w(reorder(fact_region).sort_values(["대분류코드","소주제코드","indicator_id","조사연도","지역규모코드"]),
-  "02_집계/fact_indicator_wave_region.csv")
-w(fact_dist.sort_values(["indicator_id","조사연도","코드"]), "02_집계/fact_indicator_dist.csv")
-w(fact_topic.sort_values(["대분류코드","소주제코드","조사연도"]), "02_집계/fact_topic_wave.csv")
-w(fact_headline, "02_집계/fact_headline.csv")
+  "fact_indicator_wave_region.csv")
+w(fact_dist.sort_values(["indicator_id","조사연도","코드"]), "fact_indicator_dist.csv")
+w(fact_topic.sort_values(["대분류코드","소주제코드","조사연도"]), "fact_topic_wave.csv")
+w(fact_headline, "fact_headline.csv")
 
 # 조사명·학교급·주기·원변수명·지역규모는 dim_wave / dim_indicator / dim_region에서 조회 가능하므로
 # 마이크로데이터에서는 제외한다(파일 크기 58% 감소).
@@ -350,15 +349,15 @@ for resp, fn in [("학생","student"),("학부모","parent"),("교사","teacher"
     for _, _, year, _ in WAVES:
         sub = micro[(micro.응답주체==resp) & (micro.조사연도==year)][MICRO_COLS]
         if sub.empty: continue
-        name = f"03_마이크로데이터/micro_{fn}_{year}.csv"
+        name = f"micro_{fn}_{year}.csv"
         sub.to_csv(os.path.join(OUT, name), index=False, encoding="utf-8-sig")
         print(f"  {name}: {len(sub):,}행")
 
-w(qc, "04_품질/qc_indicator_summary.csv")
-w(excl, "04_품질/qc_exclusions.csv")
+w(qc, "qc_indicator_summary.csv")
+w(excl, "qc_exclusions.csv")
 
 # 정의서 엑셀 번들 (업체 검토용)
-xl = os.path.join(OUT,"01_정의","데이터매핑정의서.xlsx")
+xl = os.path.join(OUT,"04_변수매핑정의서.xlsx")
 with pd.ExcelWriter(xl, engine="openpyxl") as xw:
     pd.DataFrame(CATEGORIES, columns=["대분류코드","대분류","출처","주요 응답주체"]).to_excel(xw, sheet_name="1_대분류",index=False)
     dim[["대분류코드","대분류","소주제코드","소주제","응답주체"]].drop_duplicates().sort_values(
@@ -367,7 +366,7 @@ with pd.ExcelWriter(xl, engine="openpyxl") as xw:
     pd.DataFrame(vlab_rows).drop_duplicates().to_excel(xw, sheet_name="4_선지라벨",index=False)
     qc.to_excel(xw, sheet_name="5_품질점검",index=False)
     excl.to_excel(xw, sheet_name="6_제외지표",index=False)
-print(f"  01_정의/데이터매핑정의서.xlsx")
+print(f"  04_변수매핑정의서.xlsx")
 
 json.dump({"지표수":int(len(dim)),
            "시계열비교가능_Y":int((dim.시계열비교가능=="Y").sum()),
@@ -378,7 +377,7 @@ json.dump({"지표수":int(len(dim)),
            "마이크로행수":int(len(micro)),
            "집계행수":{"wave":int(len(fact_wave)),"region":int(len(fact_region)),
                     "dist":int(len(fact_dist)),"topic":int(len(fact_topic))}},
-          open(os.path.join(OUT,"04_품질/build_summary.json"),"w"), ensure_ascii=False, indent=2)
+          open(os.path.join(OUT,"qc_build_summary.json"),"w"), ensure_ascii=False, indent=2)
 import tabledef
 _xl, _n = tabledef.build(OUT)
 print(f"  01_정의/테이블정의서.xlsx  " + " / ".join(f"{k}: {v}행" for k, v in _n.items()))

@@ -89,37 +89,37 @@ DESC = {
 }
 
 TABLES = [
- ("01_정의/dim_category.csv","dim_category","차원","대분류 목록",
+ ("dim_category.csv","dim_category","차원","대분류 목록",
   "화면 ② 대분류 탭 구성"),
- ("01_정의/dim_topic.csv","dim_topic","차원","대분류–소주제 트리",
+ ("dim_topic.csv","dim_topic","차원","대분류–소주제 트리",
   "화면 ③ 소주제 탭 구성"),
- ("01_정의/dim_indicator.csv","dim_indicator","차원","지표 마스터",
+ ("dim_indicator.csv","dim_indicator","차원","지표 마스터",
   "지표 정의·주기별 원변수·척도·주의사항. 전 테이블의 기준"),
- ("01_정의/dim_value_label.csv","dim_value_label","차원","선지 코드–라벨",
+ ("dim_value_label.csv","dim_value_label","차원","선지 코드–라벨",
   "화면 ⑤-③ 분포 그래프의 범례. 주기별로 라벨이 다를 수 있음"),
- ("01_정의/dim_wave.csv","dim_wave","차원","조사 주기",
+ ("dim_wave.csv","dim_wave","차원","조사 주기",
   "주기 추가 시 이 표에 행을 추가"),
- ("01_정의/dim_region.csv","dim_region","차원","지역규모 코드",""),
- ("01_정의/dim_school.csv","dim_school","차원","학교 속성",
+ ("dim_region.csv","dim_region","차원","지역규모 코드",""),
+ ("dim_school.csv","dim_school","차원","학교 속성",
   "지역규모 결합 근거. 응답 수집 여부를 응답주체별로 표기"),
- ("01_정의/dim_cross_respondent.csv","dim_cross_respondent","차원","응답주체 간 비교 성립 여부",
+ ("dim_cross_respondent.csv","dim_cross_respondent","차원","응답주체 간 비교 성립 여부",
   "화면 ⑤ 다계열 그래프. 27개 조합 중 12개만 성립하므로 반드시 확인"),
- ("02_집계/fact_indicator_wave.csv","fact_indicator_wave","사실","지표별 집계 (전체·지역 통합)",
+ ("fact_indicator_wave.csv","fact_indicator_wave","사실","지표별 집계 (전체·지역 통합)",
   "★ 주력 테이블. 화면 ⑤-① 추이와 ⑤-② 지역 비교를 모두 커버"),
- ("02_집계/fact_topic_wave.csv","fact_topic_wave","사실","소주제별 집계",
+ ("fact_topic_wave.csv","fact_topic_wave","사실","소주제별 집계",
   "화면 ④ 헤드라인 카드의 소주제 값"),
- ("02_집계/fact_headline.csv","fact_headline","사실","소주제 증감 순위",
+ ("fact_headline.csv","fact_headline","사실","소주제 증감 순위",
   "화면 ④ 헤드라인 카드"),
- ("02_집계/fact_indicator_dist.csv","fact_indicator_dist","사실","선지별 응답 분포",
+ ("fact_indicator_dist.csv","fact_indicator_dist","사실","선지별 응답 분포",
   "화면 ⑤-③ 개별 문항 2시점 비교"),
- ("02_집계/fact_indicator_wave_region.csv","fact_indicator_wave_region","사실",
+ ("fact_indicator_wave_region.csv","fact_indicator_wave_region","사실",
   "지표별 지역규모 집계 (분리본)","fact_indicator_wave의 지역 부분. 선택 사용"),
- ("03_마이크로데이터/micro_student_2021.csv","micro_student_2021","원자료","학생 개인 단위 long (1주기)",""),
- ("03_마이크로데이터/micro_student_2025.csv","micro_student_2025","원자료","학생 개인 단위 long (2주기)",""),
- ("03_마이크로데이터/micro_parent_2021.csv","micro_parent_2021","원자료","학부모 개인 단위 long (1주기)",""),
- ("03_마이크로데이터/micro_parent_2025.csv","micro_parent_2025","원자료","학부모 개인 단위 long (2주기)",""),
- ("03_마이크로데이터/micro_teacher_2021.csv","micro_teacher_2021","원자료","교사 개인 단위 long (1주기)",""),
- ("03_마이크로데이터/micro_teacher_2025.csv","micro_teacher_2025","원자료","교사 개인 단위 long (2주기)",
+ ("micro_student_2021.csv","micro_student_2021","원자료","학생 개인 단위 long (1주기)",""),
+ ("micro_student_2025.csv","micro_student_2025","원자료","학생 개인 단위 long (2주기)",""),
+ ("micro_parent_2021.csv","micro_parent_2021","원자료","학부모 개인 단위 long (1주기)",""),
+ ("micro_parent_2025.csv","micro_parent_2025","원자료","학부모 개인 단위 long (2주기)",""),
+ ("micro_teacher_2021.csv","micro_teacher_2021","원자료","교사 개인 단위 long (1주기)",""),
+ ("micro_teacher_2025.csv","micro_teacher_2025","원자료","교사 개인 단위 long (2주기)",
   "집계 재현 및 연도 갱신용. 응답주체·주기별로 6개 파일"),
 ]
 
@@ -186,7 +186,7 @@ def build(out_dir):
                내용="주기가 추가되면 전 파일을 재생성하여 교체한다. 증분 갱신은 지원하지 않는다."),
         ]),
     }
-    xl = os.path.join(out_dir, "01_정의", "테이블정의서.xlsx")
+    xl = os.path.join(out_dir, "02_테이블정의서.xlsx")
     with pd.ExcelWriter(xl, engine="openpyxl") as xw:
         for k, v in sheets.items(): v.to_excel(xw, sheet_name=k, index=False)
         wb = xw.book
