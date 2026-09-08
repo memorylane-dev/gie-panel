@@ -291,7 +291,8 @@ w(dim, "01_정의/dim_indicator.csv")
 w(pd.DataFrame(CATEGORIES, columns=["대분류코드","대분류","출처","주요 응답주체"]), "01_정의/dim_category.csv")
 w(dim[["대분류코드","대분류","소주제코드","소주제","응답주체"]].drop_duplicates()
      .sort_values(["대분류코드","소주제코드"]), "01_정의/dim_topic.csv")
-w(pd.DataFrame([{"주기코드":a,"주기번호":b,"조사연도":c,"주기명":d,"학교급":"중학교"} for a,b,c,d in WAVES]),
+w(pd.DataFrame([{"조사연도":c,"주기코드":a,"주기번호":b,"주기명":d,
+                 "조사명":"경기학교교육실태조사","학교급":"중학교"} for a,b,c,d in WAVES]),
   "01_정의/dim_wave.csv")
 w(pd.DataFrame([{"지역규모코드":k,"지역규모":v} for k,v in REGION_LBL.items()]), "01_정의/dim_region.csv")
 w(pd.DataFrame(vlab_rows).drop_duplicates(), "01_정의/dim_value_label.csv")
@@ -341,11 +342,17 @@ w(fact_dist.sort_values(["indicator_id","조사연도","코드"]), "02_집계/fa
 w(fact_topic.sort_values(["대분류코드","소주제코드","조사연도"]), "02_집계/fact_topic_wave.csv")
 w(fact_headline, "02_집계/fact_headline.csv")
 
-for resp, fn in [("학생","micro_student"),("학부모","micro_parent"),("교사","micro_teacher")]:
-    sub = micro[micro.응답주체==resp]
-    sub.to_csv(os.path.join(OUT,f"03_마이크로데이터/{fn}.csv.gz"), index=False,
-               encoding="utf-8-sig", compression="gzip")
-    print(f"  03_마이크로데이터/{fn}.csv.gz: {len(sub):,}행")
+# 조사명·학교급·주기·원변수명·지역규모는 dim_wave / dim_indicator / dim_region에서 조회 가능하므로
+# 마이크로데이터에서는 제외한다(파일 크기 58% 감소).
+# 압축하지 않고 평문 CSV로 두며, 주기별로 나누어 모든 파일이 엑셀 행 한도 내에 들어가게 한다.
+MICRO_COLS = ["조사연도","응답주체","응답자ID","학교ID","indicator_id","값","결측보정","지역규모코드"]
+for resp, fn in [("학생","student"),("학부모","parent"),("교사","teacher")]:
+    for _, _, year, _ in WAVES:
+        sub = micro[(micro.응답주체==resp) & (micro.조사연도==year)][MICRO_COLS]
+        if sub.empty: continue
+        name = f"03_마이크로데이터/micro_{fn}_{year}.csv"
+        sub.to_csv(os.path.join(OUT, name), index=False, encoding="utf-8-sig")
+        print(f"  {name}: {len(sub):,}행")
 
 w(qc, "04_품질/qc_indicator_summary.csv")
 w(excl, "04_품질/qc_exclusions.csv")

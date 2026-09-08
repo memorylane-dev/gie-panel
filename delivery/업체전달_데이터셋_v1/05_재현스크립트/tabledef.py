@@ -114,10 +114,13 @@ TABLES = [
   "화면 ⑤-③ 개별 문항 2시점 비교"),
  ("02_집계/fact_indicator_wave_region.csv","fact_indicator_wave_region","사실",
   "지표별 지역규모 집계 (분리본)","fact_indicator_wave의 지역 부분. 선택 사용"),
- ("03_마이크로데이터/micro_student.csv.gz","micro_student","원자료","학생 개인 단위 long",""),
- ("03_마이크로데이터/micro_parent.csv.gz","micro_parent","원자료","학부모 개인 단위 long",""),
- ("03_마이크로데이터/micro_teacher.csv.gz","micro_teacher","원자료","교사 개인 단위 long",
-  "집계 재현 및 연도 갱신용"),
+ ("03_마이크로데이터/micro_student_2021.csv","micro_student_2021","원자료","학생 개인 단위 long (1주기)",""),
+ ("03_마이크로데이터/micro_student_2025.csv","micro_student_2025","원자료","학생 개인 단위 long (2주기)",""),
+ ("03_마이크로데이터/micro_parent_2021.csv","micro_parent_2021","원자료","학부모 개인 단위 long (1주기)",""),
+ ("03_마이크로데이터/micro_parent_2025.csv","micro_parent_2025","원자료","학부모 개인 단위 long (2주기)",""),
+ ("03_마이크로데이터/micro_teacher_2021.csv","micro_teacher_2021","원자료","교사 개인 단위 long (1주기)",""),
+ ("03_마이크로데이터/micro_teacher_2025.csv","micro_teacher_2025","원자료","교사 개인 단위 long (2주기)",
+  "집계 재현 및 연도 갱신용. 응답주체·주기별로 6개 파일"),
 ]
 
 JOINS = [
