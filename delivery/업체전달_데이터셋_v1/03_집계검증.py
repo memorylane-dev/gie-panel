@@ -70,7 +70,7 @@ fw = pd.concat([
 core = fw[fw.지역규모 == "전체"].merge(P.reset_index(), on="indicator_id")
 core = core[(core.통계유형 == "likert")
             & (core.시계열비교가능.isin(["Y", "조건부"]))
-            & (core.역문항 == "N")]                            # ★ 역문항 제외
+            & (core.역문항 == "N")]                            # 역문항 제외 (사양서 7-1장 조건 3)
 ft = (core.groupby(["대분류코드", "대분류", "소주제코드", "소주제", "응답주체", "조사연도"])
           .agg(지표수=("indicator_id", "nunique"),
                평균환산100=("환산100", "mean")).reset_index())

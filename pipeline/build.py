@@ -286,8 +286,17 @@ def w(df, path, **kw):
     df.to_csv(os.path.join(OUT,path), index=False, encoding="utf-8-sig", **kw)
     print(f"  {path}: {len(df):,}행")
 
-w(dim, "dim_indicator.csv")
-w(pd.DataFrame(CATEGORIES, columns=["대분류코드","대분류","출처","주요 응답주체"]), "dim_category.csv")
+# 내부 검토 흔적(원 분류 체계·연계 등급·검토 메모·산출 출처)은 전달본에서 제외한다.
+INTERNAL = ["원영역","연계판정","확인필요","주체간비교","출처"]
+# 검토 메모 표기(★)와 내부 지시 어투를 전달본에서 정리한다
+for _c in ["주의사항","데이터이슈","응답기저"]:
+    if _c in dim.columns:
+        dim[_c] = (dim[_c].astype(str).str.replace("★","",regex=False)
+                   .str.replace("연구원 확인 필요","확인이 필요합니다",regex=False)
+                   .str.strip().replace({"nan":""}))
+w(dim.drop(columns=[c for c in INTERNAL if c in dim.columns]), "dim_indicator.csv")
+w(pd.DataFrame(CATEGORIES, columns=["대분류코드","대분류","_출처","주요 응답주체"])
+    .drop(columns=["_출처"]), "dim_category.csv")
 w(dim[["대분류코드","대분류","소주제코드","소주제","응답주체"]].drop_duplicates()
      .sort_values(["대분류코드","소주제코드"]), "dim_topic.csv")
 w(pd.DataFrame([{"조사연도":c,"주기코드":a,"주기번호":b,"주기명":d,
@@ -301,12 +310,11 @@ _cr = [[N(str(c)) if c is not None else "" for c in r]
        for r in wb["5_응답주체간비교"].iter_rows(values_only=True)][2:]
 _cr = [r for r in _cr if r[0]]
 cross = pd.DataFrame([dict(
-    등급=r[0], 성립여부=("성립" if r[1]=="유지" else "불가"), 사유=(""if r[1]=="유지" else r[1]),
     비교조합=r[2], 주제=r[3],
-    학생_1주기=r[4], 학생_2주기=r[5], 학생판정=r[6],
-    학부모_1주기=r[7], 학부모_2주기=r[8], 학부모판정=r[9],
-    교사_1주기=r[10], 교사_2주기=r[11], 교사판정=r[12],
-    척도=r[13], 주의사항=r[14]) for r in _cr])
+    성립여부=("성립" if r[1]=="유지" else "불가"),
+    사유=("" if r[1]=="유지" else r[1].replace("깨짐(","").replace(" 미선택)"," 문항 미포함").replace(")","")),
+    척도=r[13],
+    유의사항=r[14].replace("★","").strip()) for r in _cr])
 w(cross, "dim_cross_respondent.csv")
 sch = pd.concat([
   pd.DataFrame({"조사연도":2021,"학교ID":db1.SCHID.astype(int),"지역규모코드":db1.YM1_DB0_3,
