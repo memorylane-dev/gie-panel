@@ -28,5 +28,5 @@ find_dir = find_file  # 이름만 다른 동일 동작
 RAW_W1  = os.path.join(ROOT, "data", "raw", "wave1_2021", "spss")
 RAW_W2  = os.path.join(ROOT, "data", "raw", "wave2_2025", "spss")
 MAPPING = os.path.join(ROOT, "data", "mapping")
-DELIVERY = os.path.join(ROOT, "delivery", "업체전달_데이터셋_v1")
+DELIVERY = os.path.join(ROOT, "delivery", "업체전달_데이터셋_v2")
 BASE = ROOT  # 하위 호환

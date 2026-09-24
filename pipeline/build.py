@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-import sys, os, json, math
+import sys, os, shutil
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import ROOT, RAW_W1, RAW_W2, MAPPING, DELIVERY, N, ls, find_file
-from taxonomy import TAXO, CATEGORIES, COMPETENCY, REVERSE_ITEMS, SCALE_MISFIT, MULTIRESP_FILL0, DATA_ISSUE, COST_ITEMS, BASE_ALIGN, SUBSCALE, CONDITIONAL_BASE
+from common import ROOT, RAW_W1, RAW_W2, MAPPING, DELIVERY, N, find_file
+from taxonomy import TAXO, CATEGORIES, COMPETENCY, EXTRA_INDICATORS, REVERSE_ITEMS, SCALE_MISFIT, MULTIRESP_FILL0, DATA_ISSUE, COST_ITEMS, BASE_ALIGN, SUBSCALE, CONDITIONAL_BASE, TOPIC_NOTES
+from aggregation import aggregate
+from cleaning import collapse_schools
 import openpyxl, pyreadstat, pandas as pd, numpy as np
 
 OUT = DELIVERY
@@ -14,8 +16,9 @@ SRC = {
  ("학생",1): find_file(d1,"student total"), ("학생",2): find_file(d2,"1. 학생"),
  ("학부모",1): find_file(d1,"PAR"),          ("학부모",2): find_file(d2,"2. 학부모.sav"),
  ("교사",1): find_file(d1,"TEA"),            ("교사",2): find_file(d2,"3. 교사.sav"),
+ ("학교",1): find_file(d1,"YM1_SCH("),      ("학교",2): find_file(d2,"4. 학교.sav"),
 }
-IDCOL = {"학생":"STUID","학부모":"STUID","교사":"TID"}
+IDCOL = {"학생":"STUID","학부모":"STUID","교사":"TID","학교":"SCHID"}
 
 DATA, META = {}, {}
 for k,f in SRC.items():
@@ -30,6 +33,15 @@ db2,_ = pyreadstat.read_sav(find_file(d2,"5. SCH DB"))
 REGION = {1: db1.set_index("SCHID")["YM1_DB0_3"].to_dict(),
           2: db2.set_index("SCHID")["YM2_DB0_3"].to_dict()}
 REGION_LBL = {1.0:"중소도시", 2.0:"읍면지역"}
+ENROLLMENT, SCHOOL_NOTES = {}, {}
+for wave, db in [(1, db1), (2, db2)]:
+    cols = [f"YM{wave}_DB2_{grade}{sex}" for grade in (1, 2, 3) for sex in ("M", "W")]
+    enrollment = db[cols].where(db[cols] >= 0).sum(axis=1, min_count=6)
+    ENROLLMENT[wave] = dict(zip(db.SCHID, enrollment.where(enrollment > 0)))
+    variables = [i[f"var_{2021 if wave == 1 else 2025}"] for i in EXTRA_INDICATORS if i["응답주체"] == "학교"]
+    DATA[("학교", wave)], SCHOOL_NOTES[wave] = collapse_schools(DATA[("학교", wave)], variables)
+    print(f"학교 {wave}주기: {len(DATA[('학교', wave)])}개교, "
+          f"충돌 문항 {sum(x == '학교중복충돌→결측' for x in SCHOOL_NOTES[wave].values())}건")
 
 # ── 1. 지표 마스터 ────────────────────────────────────────────
 wb = openpyxl.load_workbook(find_file(MAPPING,"변수매칭"), data_only=True)
@@ -85,7 +97,9 @@ for r in raw:
         역문항="Y" if cid in REVERSE_ITEMS else ("척도 부적합" if cid in SCALE_MISFIT else "N"),
         시계열비교가능=ts, 주체간비교=cross, 확인필요=chk,
         데이터이슈=issue, 응답기저=CONDITIONAL_BASE.get(cid,""),
-        주의사항=note, 출처="변수매칭_6_최종연계목록"))
+        주의사항=(note + " / 문항별 값·분포는 원척도이며 구인 평균에는 역채점 후 포함." if cid in REVERSE_ITEMS
+                  else note + " / 구인 평균에서 제외하며 문항별 원척도 정보만 제공." if cid in SCALE_MISFIT else note),
+        출처="변수매칭_6_최종연계목록"))
     for w,lab in ((2021,l1),(2025,l2)):
         for c,t in sorted(lab.items()):
             vlab_rows.append(dict(indicator_id=cid, 조사연도=w, 코드=c, 라벨=t))
@@ -96,12 +110,35 @@ for cid, nm, v1, v2, jud, note in COMPETENCY:
     ind_rows.append(dict(
         indicator_id=cid, 대분류코드="C01", 대분류="학생성장", 소주제코드="S0101", 소주제="역량점수",
         응답주체="학생", 원영역="성과>학생 핵심역량", 문항명="학생 핵심역량 산출점수", 하위문항=nm,
-        지표명=nm, var_2021=v1, var_2025=v2, 연계판정=jud, 통계유형="continuous", 선지수="연속형",
-        척도최소="", 척도최대="", 척도최소라벨="", 척도최대라벨="", 긍정코드="", 역문항="N",
-        시계열비교가능=ts, 주체간비교="", 확인필요="", 데이터이슈="", 응답기저="", 주의사항=note,
+        지표명=nm, var_2021=v1, var_2025=v2, 연계판정=jud, 통계유형="score100", 선지수="연속형",
+        척도최소=0, 척도최대=100, 척도최소라벨="", 척도최대라벨="", 긍정코드="", 역문항="N",
+        시계열비교가능=ts, 주체간비교="", 확인필요="", 데이터이슈="", 응답기저="",
+        주의사항=note + " / 100점 환산만으로 문항 구성의 동등성이 확보되지는 않음. 결측은 대체하지 않고 유효 N 병기.",
         출처="변수매칭_참고_미분류변수"))
 
+# 답변 8·14번에 따른 지표 추가. 항목명과 선지는 실제 SPSS 메타데이터를 사용한다.
+for extra in EXTRA_INDICATORS:
+    resp, v1, v2 = extra["응답주체"], extra["var_2021"], extra["var_2025"]
+    labels = vlabels(resp, 2, v2)
+    name = META[(resp, 2)].column_names_to_labels[v2]
+    ind_rows.append(dict(
+        **extra, 원영역="", 문항명=extra["소주제"], 하위문항=name, 지표명=name,
+        연계판정="② 조건부 가능" if v1 else "④ 해당 없음", 선지수="5점" if labels else "연속형",
+        척도최소=min(labels) if labels else "", 척도최대=max(labels) if labels else "",
+        척도최소라벨=labels[min(labels)] if labels else "", 척도최대라벨=labels[max(labels)] if labels else "",
+        긍정코드="", 역문항="N", 주체간비교="", 확인필요="", 데이터이슈="", 응답기저="",
+        출처="2026-09-24 연구자 답변"))
+    for year, lab in [(2021, vlabels(resp, 1, v1)), (2025, labels)]:
+        for code, label in lab.items():
+            vlab_rows.append(dict(indicator_id=extra["indicator_id"], 조사연도=year, 코드=code, 라벨=label))
+
 dim = pd.DataFrame(ind_rows)
+dim["화면표시"] = np.where(dim.시계열비교가능 != "N", "시계열", "숨김")
+dim.loc[dim.indicator_id.str.startswith("TR_DIGITAL_"), "화면표시"] = "단년도"
+dim["소주제평균포함"] = np.where((dim.통계유형 == "likert") & (dim.화면표시 != "숨김")
+                                    & ~dim.indicator_id.isin(SCALE_MISFIT), "Y", "N")
+dim["역채점적용"] = np.where(dim.indicator_id.isin(REVERSE_ITEMS), "구인평균", "해당없음")
+assert dim.indicator_id.is_unique
 print("지표 수:", len(dim), "| 미매핑 문항:", set(unmapped))
 
 # ── 2. 마이크로데이터(long) ───────────────────────────────────
@@ -112,7 +149,8 @@ for _, ix in dim.iterrows():
         var = ix["var_2021"] if wnum==1 else ix["var_2025"]
         if not var or var=="—": continue
         df, m = DATA[(resp,wnum)], META[(resp,wnum)]
-        if var not in df.columns: continue
+        if var not in df.columns:
+            raise ValueError(f"지표 원변수 누락: {cid} / {year} / {var}")
         s = df[var].copy()
         # R1: 다중응답 이분 — 미선택 결측을 0으로 보정
         fill_list = MULTIRESP_FILL0["wave1"] if wnum==1 else MULTIRESP_FILL0["wave2"]
@@ -134,56 +172,31 @@ for _, ix in dim.iterrows():
                 s = s.where(df[a_var] == a_val)
                 aligned = f"기저정렬({a_var}={a_val:g})"
         # R3: 연속형 음수 결측
-        if ix["통계유형"]=="continuous":
+        if ix["통계유형"] in ("continuous", "school_rate", "school_count"):
             s = s.where(s >= 0)
+        if ix["통계유형"] == "score100":
+            s = s.where(s.between(0, 100))
+        school_notes = ([SCHOOL_NOTES[wnum].get((sid, var), "") for sid in df.SCHID]
+                        if resp == "학교" else "")
         sub = pd.DataFrame({
             "조사명": "경기학교교육실태조사", "학교급": "중학교",
             "조사연도": year, "주기": wlab, "응답주체": resp,
             "응답자ID": df[IDCOL[resp]].astype("Int64").astype(str),
             "학교ID": df["SCHID"].astype("Int64"),
             "indicator_id": cid, "원변수명": var, "값": s.values,
-            "결측보정": ("미선택→0" if filled else "") + aligned})
+            "결측보정": school_notes if resp == "학교" else ("미선택→0" if filled else "") + aligned,
+            "분모학생수": df.SCHID.map(ENROLLMENT[wnum]) if ix["통계유형"] == "school_rate" else np.nan})
         recs.append(sub)
 micro = pd.concat(recs, ignore_index=True)
-micro["지역규모코드"] = micro.apply(lambda r: REGION[1 if r["조사연도"]==2021 else 2].get(r["학교ID"]), axis=1)
+micro["지역규모코드"] = np.nan
+for _, wave, year, _ in WAVES:
+    selected = micro.조사연도.eq(year)
+    micro.loc[selected, "지역규모코드"] = micro.loc[selected, "학교ID"].map(REGION[wave])
 micro["지역규모"] = micro["지역규모코드"].map(REGION_LBL).fillna("미상")
 
 print("마이크로 long 행수:", len(micro))
 
 # ── 3. 집계 ──────────────────────────────────────────────────
-def agg(g, st, smin, smax):
-    v = g.dropna()
-    out = {"응답수": int(len(v)), "결측수": int(g.isna().sum())}
-    if len(v)==0:
-        return {**out, "평균":np.nan,"표준편차":np.nan,"중앙값":np.nan,"백분위25":np.nan,
-                "백분위75":np.nan,"절사평균":np.nan,"환산100":np.nan,"상위2선지비율":np.nan,
-                "긍정응답률":np.nan,"지출자수":np.nan,"지출참여율":np.nan,
-                "지출자평균":np.nan,"지출자중앙값":np.nan}
-    out.update(평균=round(float(v.mean()),4), 표준편차=round(float(v.std(ddof=1)),4) if len(v)>1 else np.nan,
-               중앙값=float(v.median()), 백분위25=float(v.quantile(.25)), 백분위75=float(v.quantile(.75)))
-    if st=="continuous":
-        pay = v[v > 0]
-        out["지출자수"] = int(len(pay))
-        # 분모는 해당 주기 전체 응답자(결측 포함). 2주기 결측=미지출 가정 하에서 참여율이 되며,
-        # 가정이 성립하지 않으면 하한값으로 해석한다.
-        out["지출참여율"] = round(len(pay)/len(g)*100, 2) if len(g) else np.nan
-        out["지출자평균"] = round(float(pay.mean()), 4) if len(pay) else np.nan
-        out["지출자중앙값"] = float(pay.median()) if len(pay) else np.nan
-    else:
-        out["지출자수"] = out["지출참여율"] = out["지출자평균"] = out["지출자중앙값"] = np.nan
-    if st=="continuous" and len(v)>=20:
-        lo,hi = v.quantile(.01), v.quantile(.99)
-        out["절사평균"] = round(float(v[(v>=lo)&(v<=hi)].mean()),4)
-    else:
-        out["절사평균"] = np.nan
-    if st=="likert" and smin!="" and smax!="" and smax>smin:
-        out["환산100"] = round((float(v.mean())-smin)/(smax-smin)*100, 2)
-        top2 = [smax, smax-1]
-        out["상위2선지비율"] = round(float(v.isin(top2).mean()*100), 2)
-    else:
-        out["환산100"], out["상위2선지비율"] = np.nan, np.nan
-    return out
-
 def build_facts(by_region: bool):
     rows = []
     keys = ["indicator_id","조사연도","주기"] + (["지역규모코드","지역규모"] if by_region else [])
@@ -192,31 +205,12 @@ def build_facts(by_region: bool):
         ix = dim.loc[dim.indicator_id==cid].iloc[0]
         if by_region and (pd.isna(k[3])): continue
         st = ix["통계유형"]
-        smin = ix["척도최소"] if ix["척도최소"]!="" else ""
-        smax = ix["척도최대"] if ix["척도최대"]!="" else ""
         rec = dict(zip(keys, k))
         rec.update(조사명="경기학교교육실태조사", 학교급="중학교")
         rec.update(대분류코드=ix["대분류코드"], 대분류=ix["대분류"], 소주제코드=ix["소주제코드"],
                    소주제=ix["소주제"], 응답주체=ix["응답주체"], 지표명=ix["지표명"],
-                   통계유형=st, 시계열비교가능=ix["시계열비교가능"])
-        rec.update(agg(g["값"], st, smin, smax))
-        # 대표값: 지표 유형과 무관하게 그래프 y축에 바로 쓰는 단일 값
-        if st=="likert":
-            rec["대표값"], rec["대표값유형"] = rec.get("환산100"), "환산100점"
-        elif st=="binary":
-            rec["대표값유형"] = "긍정응답률(%)"
-        elif st=="continuous":
-            rec["대표값"] = rec.get("지출자중앙값") if pd.notna(rec.get("지출자중앙값")) else rec.get("중앙값")
-            rec["대표값유형"] = "지출자 중앙값(만원)"
-        else:
-            rec["대표값"], rec["대표값유형"] = np.nan, ""
-        if st=="binary" and ix["긍정코드"]!="":
-            v = g["값"].dropna()
-            rec["긍정응답률"] = round(float((v==ix["긍정코드"]).mean()*100),2) if len(v) else np.nan
-            rec["대표값"] = rec["긍정응답률"]
-        else:
-            rec.setdefault("긍정응답률", np.nan)
-            rec.setdefault("대표값", np.nan)
+                   통계유형=st, 시계열비교가능=ix["시계열비교가능"], 화면표시=ix["화면표시"])
+        rec.update(aggregate(g, ix))
         rows.append(rec)
     return pd.DataFrame(rows)
 
@@ -244,18 +238,21 @@ d = d.merge(vl.rename(columns={"코드":"값","라벨":"선지라벨"}), on=["in
 fact_dist = d.rename(columns={"값":"코드"})
 fact_dist.insert(0,"학교급","중학교"); fact_dist.insert(0,"조사명","경기학교교육실태조사")
 
-# 소주제 총점(리커트 환산100 평균, 역문항·비교불가 제외)
-core = fact_wave[(fact_wave.통계유형=="likert") & (fact_wave.시계열비교가능.isin(["Y","조건부"]))]
-core = core[~core.indicator_id.isin(REVERSE_ITEMS | SCALE_MISFIT)]
+# 소주제 평균: 전체 응답 기준만 사용. 지역별 평균을 다시 섞지 않는다.
+core = fact_wave[(fact_wave.지역규모코드 == 0)
+                 & fact_wave.indicator_id.isin(dim.loc[dim.소주제평균포함 == "Y", "indicator_id"])]
 fact_topic = (core.groupby(["대분류코드","대분류","소주제코드","소주제","응답주체","조사연도","주기"])
-    .agg(지표수=("indicator_id","nunique"), 평균환산100=("환산100","mean"),
-         평균응답수=("응답수","mean")).reset_index())
+    .agg(지표수=("indicator_id","nunique"), 평균환산100=("구인환산100","mean"),
+         평균응답수=("응답수","mean"),
+         시계열비교가능=("시계열비교가능", lambda s: "N" if "N" in set(s) else "조건부" if "조건부" in set(s) else "Y"))
+    .reset_index())
 fact_topic["평균환산100"] = fact_topic["평균환산100"].round(2)
 fact_topic["평균응답수"] = fact_topic["평균응답수"].round(0)
+fact_topic["주의사항"] = [TOPIC_NOTES.get((sid, resp), "") for sid, resp in zip(fact_topic.소주제코드, fact_topic.응답주체)]
 fact_topic.insert(0,"학교급","중학교"); fact_topic.insert(0,"조사명","경기학교교육실태조사")
 
 # 헤드라인 카드 (2021→2025 증감)
-p = fact_topic.pivot_table(index=["대분류코드","대분류","소주제코드","소주제","응답주체"],
+p = fact_topic[fact_topic.시계열비교가능 != "N"].pivot_table(index=["대분류코드","대분류","소주제코드","소주제","응답주체"],
                            columns="조사연도", values="평균환산100").reset_index()
 # 비교 시점은 WAVES의 마지막 두 개를 사용한다(주기 추가 시 자동으로 최신 두 시점).
 _years = sorted(y for _, _, y, _ in WAVES)
@@ -263,14 +260,16 @@ PREV, CURR = _years[-2], _years[-1]
 p = p.dropna(subset=[PREV, CURR])
 p["직전시점"], p["최신시점"] = PREV, CURR
 p["증감"] = (p[CURR]-p[PREV]).round(2)
-p["증감률"] = (p["증감"]/p[PREV]*100).round(2)
+p["증감률"] = (p["증감"]/p[PREV].replace(0, np.nan)*100).round(2)
+p["선정상태"] = "후보(선정 미확정)"
+p["주의사항"] = [TOPIC_NOTES.get((sid, resp), "") for sid, resp in zip(p.소주제코드, p.응답주체)]
 p["변화방향"] = np.where(p["증감"]>0,"증가",np.where(p["증감"]<0,"감소","유지"))
 p["절대증감순위"] = p["증감"].abs().rank(ascending=False, method="min").astype(int)
 fact_headline = p.rename(columns={PREV:f"값_{PREV}", CURR:f"값_{CURR}"}).sort_values("절대증감순위")
 fact_headline.insert(0,"학교급","중학교"); fact_headline.insert(0,"조사명","경기학교교육실태조사")
 
 # ── 4. 품질 점검 ─────────────────────────────────────────────
-qc = fact_wave.pivot_table(index="indicator_id", columns="조사연도",
+qc = fact_wave[fact_wave.지역규모코드 == 0].pivot_table(index="indicator_id", columns="조사연도",
                            values=["응답수","결측수","평균"]).reset_index()
 qc.columns = ["indicator_id"] + [f"{a}_{b}" for a,b in qc.columns[1:]]
 qc = dim[["indicator_id","대분류","소주제","응답주체","지표명","통계유형","시계열비교가능",
@@ -296,8 +295,8 @@ for _c in ["주의사항","데이터이슈","응답기저"]:
                    .str.strip().replace({"nan":""}))
 w(dim.drop(columns=[c for c in INTERNAL if c in dim.columns]), "dim_indicator.csv")
 w(pd.DataFrame(CATEGORIES, columns=["대분류코드","대분류","_출처","주요 응답주체"])
-    .drop(columns=["_출처"]), "dim_category.csv")
-w(dim[["대분류코드","대분류","소주제코드","소주제","응답주체"]].drop_duplicates()
+    .drop(columns=["_출처"]).assign(확정상태="잠정(분류 확정 대기)"), "dim_category.csv")
+w(dim.loc[dim.화면표시 != "숨김", ["대분류코드","대분류","소주제코드","소주제","응답주체"]].drop_duplicates()
      .sort_values(["대분류코드","소주제코드"]), "dim_topic.csv")
 w(pd.DataFrame([{"조사연도":c,"주기코드":a,"주기번호":b,"주기명":d,
                  "조사명":"경기학교교육실태조사","학교급":"중학교"} for a,b,c,d in WAVES]),
@@ -325,17 +324,19 @@ sch["지역규모"] = sch["지역규모코드"].map(REGION_LBL)
 sch["설립구분"] = sch["설립구분코드"].map({1.0:"공립",2.0:"사립"})
 sch["남녀공학"] = sch["남녀공학코드"].map({1.0:"남학교",2.0:"여학교",3.0:"남여공학"})
 # 학교DB에는 있으나 실제 응답이 수집되지 않은 학교가 있다. 응답주체별로 표기한다.
-for resp, col in [("학생","학생응답"),("학부모","학부모응답"),("교사","교사응답")]:
+for resp, col in [("학생","학생응답"),("학부모","학부모응답"),("교사","교사응답"),("학교","학교응답")]:
     have = micro[micro.응답주체==resp].groupby("조사연도")["학교ID"].apply(set).to_dict()
     sch[col] = [("Y" if k in have.get(y,set()) else "N")
                 for y,k in zip(sch["조사연도"], sch["학교ID"])]
+sch["학생수"] = [ENROLLMENT[1 if year == 2021 else 2].get(school, np.nan)
+                 for year, school in zip(sch.조사연도, sch.학교ID)]
 w(sch, "dim_school.csv")
 
 ORDER = ["조사명","학교급","조사연도","주기","지역규모코드","지역규모",
          "대분류코드","대분류","소주제코드","소주제","응답주체","indicator_id","지표명",
          "통계유형","시계열비교가능","대표값","대표값유형",
          "응답수","결측수","평균","표준편차","중앙값","백분위25","백분위75",
-         "환산100","상위2선지비율","긍정응답률",
+         "환산100","구인환산100","상위2선지비율","긍정응답률",
          "절사평균","지출자수","지출참여율","지출자평균","지출자중앙값"]
 def reorder(df):
     cols=[c for c in ORDER if c in df.columns]+[c for c in df.columns if c not in ORDER]
@@ -352,8 +353,8 @@ w(fact_headline, "fact_headline.csv")
 # 조사명·학교급·주기·원변수명·지역규모는 dim_wave / dim_indicator / dim_region에서 조회 가능하므로
 # 마이크로데이터에서는 제외한다(파일 크기 58% 감소).
 # 압축하지 않고 평문 CSV로 두며, 주기별로 나누어 모든 파일이 엑셀 행 한도 내에 들어가게 한다.
-MICRO_COLS = ["조사연도","응답주체","응답자ID","학교ID","indicator_id","값","결측보정","지역규모코드"]
-for resp, fn in [("학생","student"),("학부모","parent"),("교사","teacher")]:
+MICRO_COLS = ["조사연도","응답주체","응답자ID","학교ID","indicator_id","값","결측보정","지역규모코드","분모학생수"]
+for resp, fn in [("학생","student"),("학부모","parent"),("교사","teacher"),("학교","school")]:
     for _, _, year, _ in WAVES:
         sub = micro[(micro.응답주체==resp) & (micro.조사연도==year)][MICRO_COLS]
         if sub.empty: continue
@@ -363,10 +364,12 @@ for resp, fn in [("학생","student"),("학부모","parent"),("교사","teacher"
 
 
 
+shutil.copyfile(os.path.join(ROOT, "pipeline", "delivery_spec.md"), os.path.join(OUT, "02_집계사양서.md"))
+shutil.copyfile(os.path.join(ROOT, "pipeline", "verify_delivery.py"), os.path.join(OUT, "03_집계검증.py"))
 import tabledef, guidedoc
 _xl, _n = tabledef.build(OUT)
 guidedoc.build(OUT, dim, micro, fact_wave, fact_topic, fact_headline, cross, WAVES)
 print("  00_전달안내.md")
-print(f"  01_정의/테이블정의서.xlsx  " + " / ".join(f"{k}: {v}행" for k, v in _n.items()))
+print(f"  01_테이블정의서.xlsx  " + " / ".join(f"{k}: {v}행" for k, v in _n.items()))
 
 print("\n완료:", OUT)
